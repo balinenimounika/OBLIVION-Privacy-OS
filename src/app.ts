@@ -54,13 +54,29 @@ export function createApp(): Application {
   // 5. Direct Root Health Endpoint
   app.get('/health', HealthController.check);
 
-  // 6. Master API Router (/api/v1)
+  // 6. Root API Welcome Endpoint
+  app.get('/', (_req, res) => {
+    res.status(200).json({
+      success: true,
+      message: "Welcome to OBLIVION - The Internet's Forget Button",
+      data: {
+        application: 'OBLIVION',
+        description: 'Privacy Management Platform',
+        status: 'operational',
+        environment: process.env.NODE_ENV,
+        health: '/health',
+        api: '/api/v1',
+      },
+    });
+  });
+
+  // 7. Master API Router (/api/v1)
   app.use('/api/v1', apiRouter);
 
-  // 7. 404 Route Not Found Middleware
+  // 8. 404 Route Not Found Middleware
   app.use(notFoundHandler);
 
-  // 8. Centralized Error Handling Middleware
+  // 9. Centralized Error Handling Middleware
   app.use(errorHandler);
 
   return app;

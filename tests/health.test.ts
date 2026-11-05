@@ -88,6 +88,29 @@ async function runTests() {
     if (!apiOk) allPassed = false;
 
     // -------------------------------------------------------------------------
+    // 4. GET / (Root API Welcome Endpoint)
+    // -------------------------------------------------------------------------
+    const resWelcome = await request(app).get('/');
+    const welcomeOk =
+      resWelcome.status === 200 &&
+      resWelcome.body.success === true &&
+      resWelcome.body.message === "Welcome to OBLIVION - The Internet's Forget Button" &&
+      resWelcome.body.data?.application === 'OBLIVION' &&
+      resWelcome.body.data?.description === 'Privacy Management Platform' &&
+      resWelcome.body.data?.status === 'operational' &&
+      resWelcome.body.data?.health === '/health' &&
+      resWelcome.body.data?.api === '/api/v1';
+
+    recordTest(
+      'GET / (Root API Welcome Endpoint)',
+      welcomeOk,
+      welcomeOk
+        ? `Status 200 OK. Application: ${resWelcome.body.data.application}, Status: ${resWelcome.body.data.status}, Health: ${resWelcome.body.data.health}, API: ${resWelcome.body.data.api}`
+        : `Failed with status ${resWelcome.status}: ${JSON.stringify(resWelcome.body)}`
+    );
+    if (!welcomeOk) allPassed = false;
+
+    // -------------------------------------------------------------------------
     // 4. Security Headers (Helmet)
     // -------------------------------------------------------------------------
     const hasHelmet =
