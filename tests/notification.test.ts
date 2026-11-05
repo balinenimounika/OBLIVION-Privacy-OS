@@ -60,6 +60,9 @@ async function runNotificationTests(): Promise<boolean> {
     const bobToken = userBRes.tokens.accessToken;
     createdUserIds.push(bobId);
 
+    // Clear any automatic registration welcome notifications so test starts with controlled state
+    await prisma.notification.deleteMany({ where: { userId: { in: [aliceId, bobId] } } });
+
     // Seed notifications for Alice (2 unread)
     const notifA1 = await prisma.notification.create({
       data: {

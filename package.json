@@ -5,8 +5,10 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/src/server.js",
+    "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
+    "dev:watch": "node --watch-path=src -r ts-node/register src/server.ts",
+    "typecheck": "tsc --noEmit",
     "test": "ts-node tests/health.test.ts",
     "test:auth": "ts-node tests/auth.test.ts",
     "test:tenant": "ts-node tests/tenant-security.test.ts",

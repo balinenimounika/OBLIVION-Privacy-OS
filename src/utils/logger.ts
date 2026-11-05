@@ -3,9 +3,25 @@
  *
  * Formats logs with timestamps and levels.
  * Automatically sanitizes sensitive credentials and secrets.
+ * Outputs machine-parseable single-line JSON in production mode (or when LOG_FORMAT=json).
+ * Supports error monitoring listeners (e.g. APM / Sentry / OpenTelemetry).
  */
 
-const SENSITIVE_KEYS = ['password', 'passwordHash', 'token', 'authorization', 'secret', 'jwt'];
+const SENSITIVE_KEYS = [
+  'password',
+  'passwordhash',
+  'token',
+  'authorization',
+  'secret',
+  'jwt',
+  'apikey',
+  'resend_api_key',
+  'svix',
+  'private_key',
+];
+
+type ErrorListener = (error: Error, context?: any) => void;
+const errorListeners: ErrorListener[] = [];
 
 function sanitize(data: any): any {
   if (data === null || data === undefined) return data;
@@ -25,24 +41,79 @@ function sanitize(data: any): any {
   return copy;
 }
 
+function outputLog(level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: string, meta?: any) {
+  const timestamp = new Date().toISOString();
+  const isProd = process.env.NODE_ENV === 'production' || process.env.LOG_FORMAT === 'json';
+
+  if (isProd) {
+    const payload: Record<string, any> = {
+      timestamp,
+      level: level.toLowerCase(),
+      message,
+    };
+    if (meta !== undefined) {
+      payload.context = sanitize(meta);
+    }
+    const logLine = JSON.stringify(payload);
+    if (level === 'ERROR') {
+      console.error(logLine);
+    } else if (level === 'WARN') {
+      console.warn(logLine);
+    } else if (level === 'DEBUG') {
+      console.debug(logLine);
+    } else {
+      console.log(logLine);
+    }
+    return;
+  }
+
+  // Development / Test mode: Human-readable output
+  const metaStr = meta ? ` ${JSON.stringify(sanitize(meta))}` : '';
+  if (level === 'ERROR') {
+    console.error(`[${timestamp}] [ERROR] ${message}${metaStr}`);
+  } else if (level === 'WARN') {
+    console.warn(`[${timestamp}] [WARN] ${message}${metaStr}`);
+  } else if (level === 'DEBUG') {
+    console.debug(`[${timestamp}] [DEBUG] ${message}${metaStr}`);
+  } else {
+    console.log(`[${timestamp}] [INFO] ${message}${metaStr}`);
+  }
+}
+
 export const logger = {
   info: (message: string, meta?: any) => {
-    const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] [INFO] ${message}`, meta ? JSON.stringify(sanitize(meta)) : '');
+    outputLog('INFO', message, meta);
   },
   warn: (message: string, meta?: any) => {
-    const timestamp = new Date().toISOString();
-    console.warn(`[${timestamp}] [WARN] ${message}`, meta ? JSON.stringify(sanitize(meta)) : '');
+    outputLog('WARN', message, meta);
   },
   error: (message: string, error?: any) => {
-    const timestamp = new Date().toISOString();
-    const errorDetails = error instanceof Error ? { message: error.message, stack: error.stack } : error;
-    console.error(`[${timestamp}] [ERROR] ${message}`, errorDetails ? JSON.stringify(sanitize(errorDetails)) : '');
+    const errorDetails =
+      error instanceof Error
+        ? { name: error.name, message: error.message, stack: error.stack }
+        : error;
+    outputLog('ERROR', message, errorDetails);
+
+    // Dispatch to registered error monitoring listeners
+    if (error instanceof Error) {
+      errorListeners.forEach((listener) => {
+        try {
+          listener(error, { message });
+        } catch {
+          // Prevent listener failures from crashing the application
+        }
+      });
+    }
   },
   debug: (message: string, meta?: any) => {
     if (process.env.NODE_ENV === 'development') {
-      const timestamp = new Date().toISOString();
-      console.debug(`[${timestamp}] [DEBUG] ${message}`, meta ? JSON.stringify(sanitize(meta)) : '');
+      outputLog('DEBUG', message, meta);
     }
+  },
+  /**
+   * Registers an external error monitoring handler (e.g. Sentry / Datadog / OpenTelemetry)
+   */
+  onError: (listener: ErrorListener) => {
+    errorListeners.push(listener);
   },
 };

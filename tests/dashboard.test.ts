@@ -107,6 +107,9 @@ async function runDashboardTests(): Promise<boolean> {
       },
     });
 
+    // Clear automatic registration welcome notifications for clean dashboard baseline
+    await prisma.notification.deleteMany({ where: { userId: aliceId } });
+
     await prisma.notification.create({
       data: {
         userId: aliceId,
