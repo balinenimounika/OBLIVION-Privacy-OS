@@ -29,7 +29,7 @@ export function createApp(): Application {
         if (allowedOrigins.includes('*') || allowedOrigins.includes(requestOrigin)) {
           return callback(null, requestOrigin);
         }
-        return callback(new Error(`Blocked by CORS policy: Origin ${requestOrigin} not permitted`));
+        return callback(null, false);
       },
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],

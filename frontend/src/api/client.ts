@@ -1,7 +1,11 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { ApiResponse } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.PROD
+    ? 'https://oblivion-privacy-os-backend.onrender.com/api/v1'
+    : 'http://localhost:5000/api/v1');
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
