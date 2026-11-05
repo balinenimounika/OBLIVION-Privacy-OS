@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bg-base: 7 10 18;
+    --color-bg-surface: 11 15 25;
+    --color-bg-card: 14 20 36;
+    --color-border: 30 43 75;
+    --color-text-main: 241 245 249;
+    --color-text-muted: 148 163 184;
+  }
+
+  .light {
+    --color-bg-base: 248 250 252;
+    --color-bg-surface: 255 255 255;
+    --color-bg-card: 241 245 249;
+    --color-border: 226 232 240;
+    --color-text-main: 15 23 42;
+    --color-text-muted: 100 116 139;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(11, 15, 25, 0.5);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.3);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.6);
+}
+
+/* Subtle glow animations */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 0.2; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(1.05); }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 8s ease-in-out infinite;
+}

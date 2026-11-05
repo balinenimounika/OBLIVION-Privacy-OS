@@ -1,0 +1,404 @@
+// ==============================================================================
+// OBLIVION - The Internet's Forget Button
+// Production PostgreSQL Database Schema (Prisma ORM)
+// ==============================================================================
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ------------------------------------------------------------------------------
+// ENUMS
+// ------------------------------------------------------------------------------
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+  PENDING_VERIFICATION
+}
+
+enum WebsiteCategory {
+  SOCIAL_MEDIA
+  E_COMMERCE
+  FINANCIAL_SERVICES
+  HEALTHCARE
+  EMPLOYMENT
+  EDUCATION
+  ENTERTAINMENT
+  GOVERNMENT
+  TELECOMMUNICATIONS
+  UTILITIES
+  OTHER
+}
+
+enum SensitivityLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RecordStatus {
+  ACTIVE
+  PENDING_REVIEW
+  REMOVAL_REQUESTED
+  REMOVED
+  ARCHIVED
+}
+
+enum RemovalRequestType {
+  GDPR_ERASURE // General Data Protection Regulation - Article 17 (Right to be Forgotten)
+  CCPA_DELETION // California Consumer Privacy Act - Right to Delete
+  DATA_ERASURE_GENERAL // General Privacy / Platform Erasure Request
+  ACCOUNT_CLOSURE // Full Account Deletion Request
+  MARKETING_OPT_OUT // Direct Marketing / Data Broker Unsubscribe
+  CUSTOM // Custom Written Request
+}
+
+enum RequestStatus {
+  DRAFT
+  SUBMITTED
+  ACKNOWLEDGED
+  IN_PROGRESS
+  FOLLOW_UP_REQUIRED
+  COMPLETED
+  REJECTED
+  APPEALED
+}
+
+enum ReminderType {
+  EXPIRY_CHECK
+  ANNUAL_PRIVACY_REVIEW
+  FOLLOW_UP_REMOVAL
+  CONSENT_REVALIDATION
+  CUSTOM
+}
+
+enum ReminderStatus {
+  PENDING
+  DISMISSED
+  SNOOZED
+  COMPLETED
+}
+
+enum NotificationType {
+  SECURITY_ALERT
+  REMINDER_DUE
+  REQUEST_STATUS_UPDATE
+  SYSTEM_NOTICE
+  EXPOSURE_EXPIRING
+}
+
+enum EmailDeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  DELIVERED
+  BOUNCED
+  FAILED
+  CANCELLED
+}
+
+enum OverdueFrequency {
+  DAILY
+  THREE_DAYS
+  WEEKLY
+  NONE
+}
+
+// ------------------------------------------------------------------------------
+// MODELS
+// ------------------------------------------------------------------------------
+
+/// User account model managing privacy dashboard access and identity
+model User {
+  id            String        @id @default(uuid()) @db.Uuid
+  fullName      String        @map("full_name") @db.VarChar(255)
+  email         String        @unique @db.VarChar(255)
+  passwordHash  String        @map("password_hash") @db.VarChar(255)
+  accountStatus          AccountStatus @default(ACTIVE) @map("account_status")
+  isEmailVerified        Boolean       @default(true) @map("is_email_verified")
+  emailVerificationToken String?       @map("email_verification_token") @db.VarChar(255)
+  createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relationships
+  websites               Website[]
+  exposureRecords        ExposureRecord[]
+  removalRequests        RemovalRequest[]
+  reminders              Reminder[]
+  notifications          Notification[]
+  auditLogs              AuditLog[]
+  emailDeliveries        EmailDelivery[]
+  notificationPreference UserNotificationPreference?
+
+  @@index([email])
+  @@index([accountStatus])
+  @@map("users")
+}
+
+/// Websites/platforms where user personal data is exposed or stored
+model Website {
+  id              String          @id @default(uuid()) @db.Uuid
+  userId          String          @map("user_id") @db.Uuid
+  websiteName     String          @map("website_name") @db.VarChar(255)
+  websiteUrl      String          @map("website_url") @db.VarChar(1024)
+  websiteCategory WebsiteCategory @default(OTHER) @map("website_category")
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relationships
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exposureRecords ExposureRecord[]
+  removalRequests RemovalRequest[]
+
+  @@unique([userId, websiteUrl])
+  @@index([userId])
+  @@index([websiteName])
+  @@index([websiteCategory])
+  @@map("websites")
+}
+
+/// Exposure Records representing personal data entries entrusted to websites
+model ExposureRecord {
+  id               String           @id @default(uuid()) @db.Uuid
+  userId           String           @map("user_id") @db.Uuid
+  websiteId        String           @map("website_id") @db.Uuid
+  purpose          String           @db.VarChar(255)
+  sensitivityLevel SensitivityLevel @default(MEDIUM) @map("sensitivity_level")
+  dateShared       DateTime         @map("date_shared") @db.Timestamptz
+  reviewDate       DateTime?        @map("review_date") @db.Timestamptz
+  expiryDate       DateTime?        @map("expiry_date") @db.Timestamptz
+  recordStatus     RecordStatus     @default(ACTIVE) @map("record_status")
+  notes            String?          @db.Text
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relationships
+  user            User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  website         Website                  @relation(fields: [websiteId], references: [id], onDelete: Restrict)
+  categories      ExposureRecordCategory[]
+  removalRequests RemovalRequest[]
+  reminders       Reminder[]
+
+  @@index([userId])
+  @@index([websiteId])
+  @@index([recordStatus])
+  @@index([sensitivityLevel])
+  @@index([reviewDate])
+  @@index([userId, recordStatus])
+  @@map("exposure_records")
+}
+
+/// Predefined reference data categories classifying types of personal information
+model DataCategory {
+  id                 String           @id @default(uuid()) @db.Uuid
+  categoryName       String           @unique @map("category_name") @db.VarChar(100)
+  description        String           @db.Text
+  defaultSensitivity SensitivityLevel @default(MEDIUM) @map("default_sensitivity")
+  riskWeight         Int              @default(5) @map("risk_weight")
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relationships
+  exposureRecords ExposureRecordCategory[]
+
+  @@index([categoryName])
+  @@index([defaultSensitivity])
+  @@map("data_categories")
+}
+
+/// Join table enabling multiple data categories per exposure record
+model ExposureRecordCategory {
+  id               String @id @default(uuid()) @db.Uuid
+  exposureRecordId String @map("exposure_record_id") @db.Uuid
+  dataCategoryId   String @map("data_category_id") @db.Uuid
+
+  // Relationships
+  exposureRecord ExposureRecord @relation(fields: [exposureRecordId], references: [id], onDelete: Cascade)
+  dataCategory   DataCategory   @relation(fields: [dataCategoryId], references: [id], onDelete: Restrict)
+
+  @@unique([exposureRecordId, dataCategoryId])
+  @@index([exposureRecordId])
+  @@index([dataCategoryId])
+  @@map("exposure_record_categories")
+}
+
+/// Removal requests initiated to purge personal data from external services
+model RemovalRequest {
+  id                String             @id @default(uuid()) @db.Uuid
+  userId            String             @map("user_id") @db.Uuid
+  websiteId         String             @map("website_id") @db.Uuid
+  exposureRecordId  String             @map("exposure_record_id") @db.Uuid
+  requestType       RemovalRequestType @default(GDPR_ERASURE) @map("request_type")
+  requestReason     String             @map("request_reason") @db.Text
+  requestStatus     RequestStatus      @default(DRAFT) @map("request_status")
+  submittedAt       DateTime?          @map("submitted_at") @db.Timestamptz
+  resolvedAt        DateTime?          @map("resolved_at") @db.Timestamptz
+  externalReference String?            @map("external_reference") @db.VarChar(255)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relationships
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  website        Website          @relation(fields: [websiteId], references: [id], onDelete: Restrict)
+  exposureRecord ExposureRecord   @relation(fields: [exposureRecordId], references: [id], onDelete: Cascade)
+  history        RequestHistory[]
+
+  @@index([userId])
+  @@index([websiteId])
+  @@index([exposureRecordId])
+  @@index([requestStatus])
+  @@index([submittedAt])
+  @@index([userId, requestStatus])
+  @@map("removal_requests")
+}
+
+/// Historical audit of all removal request status transitions
+model RequestHistory {
+  id               String         @id @default(uuid()) @db.Uuid
+  removalRequestId String         @map("removal_request_id") @db.Uuid
+  previousStatus   RequestStatus? @map("previous_status")
+  newStatus        RequestStatus  @map("new_status")
+  remarks          String?        @db.Text
+  changedAt        DateTime       @default(now()) @map("changed_at") @db.Timestamptz
+
+  // Relationships
+  removalRequest RemovalRequest @relation(fields: [removalRequestId], references: [id], onDelete: Cascade)
+
+  @@index([removalRequestId])
+  @@index([changedAt])
+  @@map("request_history")
+}
+
+/// Reminders for upcoming privacy reviews, consent expirations, or follow-ups
+model Reminder {
+  id               String         @id @default(uuid()) @db.Uuid
+  userId           String         @map("user_id") @db.Uuid
+  exposureRecordId String         @map("exposure_record_id") @db.Uuid
+  reminderType     ReminderType   @default(ANNUAL_PRIVACY_REVIEW) @map("reminder_type")
+  reminderDate     DateTime       @map("reminder_date") @db.Timestamptz
+  reminderStatus   ReminderStatus @default(PENDING) @map("reminder_status")
+  completedAt      DateTime?      @map("completed_at") @db.Timestamptz
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relationships
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exposureRecord  ExposureRecord  @relation(fields: [exposureRecordId], references: [id], onDelete: Cascade)
+  emailDeliveries EmailDelivery[]
+
+  @@unique([exposureRecordId, reminderType, reminderDate])
+  @@index([userId])
+  @@index([exposureRecordId])
+  @@index([reminderStatus])
+  @@index([reminderDate])
+  @@index([userId, reminderStatus])
+  @@map("reminders")
+}
+
+/// In-app user notifications for alerts, reminders, and request status changes
+model Notification {
+  id               String           @id @default(uuid()) @db.Uuid
+  userId           String           @map("user_id") @db.Uuid
+  title            String           @db.VarChar(255)
+  message          String           @db.Text
+  notificationType NotificationType @default(SYSTEM_NOTICE) @map("notification_type")
+  isRead           Boolean          @default(false) @map("is_read")
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relationships
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailDeliveries EmailDelivery[]
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+/// Tamper-evident audit log tracking critical platform actions and security events
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  action     String   @db.VarChar(100)
+  entityType String   @map("entity_type") @db.VarChar(100)
+  entityId   String   @map("entity_id") @db.VarChar(64)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+/// Persistent tracking of transactional email alerts dispatched via Resend
+model EmailDelivery {
+  id                String              @id @default(uuid()) @db.Uuid
+  userId            String              @map("user_id") @db.Uuid
+  reminderId        String?             @map("reminder_id") @db.Uuid
+  notificationId    String?             @map("notification_id") @db.Uuid
+  notificationStage String              @map("notification_stage") @db.VarChar(50)
+  recipientEmail    String              @map("recipient_email") @db.VarChar(255)
+  subject           String              @db.VarChar(255)
+  resendEmailId     String?             @map("resend_email_id") @db.VarChar(100)
+  deliveryStatus    EmailDeliveryStatus @default(PENDING) @map("delivery_status")
+  attemptCount      Int                 @default(0) @map("attempt_count")
+  lastAttemptAt     DateTime?           @map("last_attempt_at") @db.Timestamptz
+  nextRetryAt       DateTime?           @map("next_retry_at") @db.Timestamptz
+  sentAt            DateTime?           @map("sent_at") @db.Timestamptz
+  deliveredAt       DateTime?           @map("delivered_at") @db.Timestamptz
+  failedAt          DateTime?           @map("failed_at") @db.Timestamptz
+  errorMessage      String?             @map("error_message") @db.Text
+  metadata          Json?               @map("metadata")
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relationships
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reminder     Reminder?     @relation(fields: [reminderId], references: [id], onDelete: Cascade)
+  notification Notification? @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+
+  @@unique([reminderId, notificationStage, recipientEmail])
+  @@index([userId])
+  @@index([deliveryStatus])
+  @@index([resendEmailId])
+  @@index([nextRetryAt])
+  @@index([createdAt])
+  @@map("email_deliveries")
+}
+
+/// User notification and email delivery preferences
+model UserNotificationPreference {
+  id                        String           @id @default(uuid()) @db.Uuid
+  userId                    String           @unique @map("user_id") @db.Uuid
+  emailNotificationsEnabled Boolean          @default(true) @map("email_notifications_enabled")
+  notifyOnCreated           Boolean          @default(true) @map("notify_on_created")
+  notify7DaysBefore         Boolean          @default(true) @map("notify_7_days_before")
+  notify3DaysBefore         Boolean          @default(true) @map("notify_3_days_before")
+  notify1DayBefore          Boolean          @default(true) @map("notify_1_day_before")
+  notifyDueToday            Boolean          @default(true) @map("notify_due_today")
+  notifyOverdue             Boolean          @default(true) @map("notify_overdue")
+  notifyCompleted           Boolean          @default(true) @map("notify_completed")
+  notifyRemovalUpdates      Boolean          @default(true) @map("notify_removal_updates")
+  notifyAccountSecurity     Boolean          @default(true) @map("notify_account_security")
+  welcomeEmailSent          Boolean          @default(false) @map("welcome_email_sent")
+  overdueFrequency          OverdueFrequency @default(DAILY) @map("overdue_frequency")
+  createdAt                 DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                 DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_notification_preferences")
+}
