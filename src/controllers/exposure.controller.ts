@@ -23,7 +23,7 @@ export class ExposureController {
 
   /**
    * GET /api/v1/exposures
-   * Lists exposure records owned by current user.
+   * Lists exposure records owned by current user with filters & sorting.
    */
   static async list(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -36,8 +36,21 @@ export class ExposureController {
   }
 
   /**
+   * GET /api/v1/exposures/summary
+   * Aggregates exposure dashboard metrics: summary counts, risk distribution, platforms.
+   */
+  static async getSummary(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const summary = await ExposureService.getSummary(req.user!.id);
+      ApiResponse.success(res, 'Exposure summary metrics retrieved successfully', summary);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * GET /api/v1/exposures/:id
-   * Retrieves single exposure record by ID.
+   * Retrieves single exposure record by ID with timeline and breakdown.
    */
   static async getById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -58,6 +71,34 @@ export class ExposureController {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const record = await ExposureService.updateExposure(req.user!.id, id, req.body);
       ApiResponse.success(res, 'Exposure record updated successfully', record);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/v1/exposures/:id/resolve
+   * Explicitly marks an exposure record as RESOLVED.
+   */
+  static async markResolved(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const record = await ExposureService.markAsResolved(req.user!.id, id);
+      ApiResponse.success(res, 'Exposure marked as resolved successfully', record);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/exposures/:id/removal-requests
+   * Creates a removal request directly linked to this exposure.
+   */
+  static async createRemovalRequest(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const removal = await ExposureService.createRemovalRequestForExposure(req.user!.id, id, req.body);
+      ApiResponse.created(res, 'Removal request initiated from exposure successfully', removal);
     } catch (error) {
       next(error);
     }

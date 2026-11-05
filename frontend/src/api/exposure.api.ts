@@ -1,5 +1,13 @@
 import { apiClient } from './client';
-import { ApiResponse, ExposureRecord, CreateExposureDTO, UpdateExposureDTO } from '../types';
+import {
+  ApiResponse,
+  ExposureRecord,
+  CreateExposureDTO,
+  UpdateExposureDTO,
+  ExposureSummaryResponse,
+  CreateExposureRemovalDTO,
+  RemovalRequest,
+} from '../types';
 
 export const exposureApi = {
   async list(params?: {
@@ -8,10 +16,20 @@ export const exposureApi = {
     websiteId?: string;
     sensitivityLevel?: string;
     recordStatus?: string;
+    visibility?: string;
+    remediationStatus?: string;
+    exposureSource?: string;
+    sharingStatus?: string;
+    search?: string;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
   }): Promise<ApiResponse<ExposureRecord[]>> {
     const res = await apiClient.get<ApiResponse<ExposureRecord[]>>('/exposures', { params });
+    return res.data;
+  },
+
+  async getSummary(): Promise<ApiResponse<ExposureSummaryResponse>> {
+    const res = await apiClient.get<ApiResponse<ExposureSummaryResponse>>('/exposures/summary');
     return res.data;
   },
 
@@ -27,6 +45,16 @@ export const exposureApi = {
 
   async update(id: string, data: UpdateExposureDTO): Promise<ApiResponse<ExposureRecord>> {
     const res = await apiClient.patch<ApiResponse<ExposureRecord>>(`/exposures/${id}`, data);
+    return res.data;
+  },
+
+  async markAsResolved(id: string): Promise<ApiResponse<ExposureRecord>> {
+    const res = await apiClient.patch<ApiResponse<ExposureRecord>>(`/exposures/${id}/resolve`);
+    return res.data;
+  },
+
+  async createRemovalRequest(id: string, data: CreateExposureRemovalDTO): Promise<ApiResponse<RemovalRequest>> {
+    const res = await apiClient.post<ApiResponse<RemovalRequest>>(`/exposures/${id}/removal-requests`, data);
     return res.data;
   },
 

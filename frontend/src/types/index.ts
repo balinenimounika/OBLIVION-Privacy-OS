@@ -118,6 +118,34 @@ export interface DataCategory {
 export type SensitivityLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 export type RecordStatus = 'ACTIVE' | 'PENDING_REVIEW' | 'REMOVAL_REQUESTED' | 'REMOVED' | 'ARCHIVED';
 
+export type ExposureSource =
+  | 'ACCOUNT_REGISTRATION'
+  | 'JOB_APPLICATION'
+  | 'SOCIAL_MEDIA'
+  | 'PUBLIC_WEBSITE'
+  | 'ONLINE_PURCHASE'
+  | 'OTHER';
+
+export type ExposureVisibility = 'PRIVATE' | 'RESTRICTED' | 'PUBLIC' | 'UNKNOWN';
+
+export type DataSharingStatus = 'ACTIVE' | 'NO_LONGER_SHARED' | 'UNKNOWN';
+
+export type RemediationStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'RESOLVED';
+
+export interface RiskBreakdown {
+  baseCategoryWeight: number;
+  categoryCount: number;
+  categoryVolumeFactor: number;
+  platformSensitivityMultiplier: number;
+  visibilityMultiplier: number;
+  sharingStatusMultiplier: number;
+  remediationMultiplier: number;
+  rawScore: number;
+  normalizedScore: number;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  keyFactors: string[];
+}
+
 export interface ExposureCategoryJoin {
   dataCategory: DataCategory;
 }
@@ -133,10 +161,26 @@ export interface ExposureRecord {
   expiryDate?: string | null;
   recordStatus: RecordStatus;
   notes?: string | null;
+  platformUrl?: string | null;
+  dataDescription?: string | null;
+  exposureSource?: ExposureSource;
+  visibility?: ExposureVisibility;
+  sharingStatus?: DataSharingStatus;
+  lastVerifiedDate?: string | null;
+  remediationStatus?: RemediationStatus;
+  evidenceAttachment?: string | null;
   calculatedRiskScore?: number;
-  calculatedRiskRating?: string;
+  calculatedRiskRating?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  riskBreakdown?: RiskBreakdown;
   website?: Website;
   categories?: ExposureCategoryJoin[];
+  removalRequests?: RemovalRequest[];
+  activityTimeline?: Array<{
+    id: string;
+    action: string;
+    entityType: string;
+    createdAt: string;
+  }>;
   createdAt: string;
   updatedAt: string;
 }
@@ -148,11 +192,21 @@ export interface CreateExposureDTO {
   dateShared: string;
   reviewDate?: string | null;
   expiryDate?: string | null;
+  recordStatus?: RecordStatus;
   notes?: string | null;
   categoryIds?: string[];
+  platformUrl?: string | null;
+  dataDescription?: string | null;
+  exposureSource?: ExposureSource;
+  visibility?: ExposureVisibility;
+  sharingStatus?: DataSharingStatus;
+  lastVerifiedDate?: string | null;
+  remediationStatus?: RemediationStatus;
+  evidenceAttachment?: string | null;
 }
 
 export interface UpdateExposureDTO {
+  websiteId?: string;
   purpose?: string;
   sensitivityLevel?: SensitivityLevel;
   dateShared?: string;
@@ -161,6 +215,41 @@ export interface UpdateExposureDTO {
   recordStatus?: RecordStatus;
   notes?: string | null;
   categoryIds?: string[];
+  platformUrl?: string | null;
+  dataDescription?: string | null;
+  exposureSource?: ExposureSource;
+  visibility?: ExposureVisibility;
+  sharingStatus?: DataSharingStatus;
+  lastVerifiedDate?: string | null;
+  remediationStatus?: RemediationStatus;
+  evidenceAttachment?: string | null;
+}
+
+export interface ExposureSummaryResponse {
+  totalExposures: number;
+  activeExposures: number;
+  criticalExposures: number;
+  resolvedExposures: number;
+  riskDistribution: {
+    low: number;
+    medium: number;
+    high: number;
+    critical: number;
+  };
+  byPlatform: Array<{
+    platformId: string;
+    platformName: string;
+    platformUrl: string;
+    exposureCount: number;
+    highestRisk: number;
+    hasCritical: boolean;
+  }>;
+}
+
+export interface CreateExposureRemovalDTO {
+  requestType?: RemovalRequestType;
+  requestReason: string;
+  externalReference?: string | null;
 }
 
 // ============================================================================

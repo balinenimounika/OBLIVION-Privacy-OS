@@ -15,6 +15,7 @@ import {
   createExposureSchema,
   updateExposureSchema,
   exposureQuerySchema,
+  createExposureRemovalSchema,
 } from '../validators/exposure.validator';
 
 const router = Router();
@@ -35,6 +36,12 @@ router.get(
   ExposureController.list
 );
 
+// Aggregated summary metrics (registered before :id parameter route)
+router.get(
+  '/summary',
+  ExposureController.getSummary
+);
+
 router.get(
   '/:id',
   validateUuidParam('id'),
@@ -47,6 +54,21 @@ router.patch(
   validateUuidParam('id'),
   validateRequest({ body: updateExposureSchema }),
   ExposureController.update
+);
+
+router.patch(
+  '/:id/resolve',
+  rejectInjectedTenantFields,
+  validateUuidParam('id'),
+  ExposureController.markResolved
+);
+
+router.post(
+  '/:id/removal-requests',
+  rejectInjectedTenantFields,
+  validateUuidParam('id'),
+  validateRequest({ body: createExposureRemovalSchema }),
+  ExposureController.createRemovalRequest
 );
 
 router.delete(

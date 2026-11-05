@@ -15,6 +15,7 @@ const prisma = new PrismaClient();
 
 interface ReferenceCategory {
   categoryName: string;
+  legacyNames?: string[];
   description: string;
   defaultSensitivity: SensitivityLevel;
   riskWeight: number;
@@ -22,76 +23,88 @@ interface ReferenceCategory {
 
 const REFERENCE_CATEGORIES: ReferenceCategory[] = [
   {
-    categoryName: 'Email Address',
-    description: 'Primary or secondary electronic mail addresses, recovery email addresses, and associated contact lists.',
-    defaultSensitivity: SensitivityLevel.LOW,
-    riskWeight: 3,
+    categoryName: 'Government Identification',
+    legacyNames: ['Government Identification Category'],
+    description: 'Passports, national identity numbers, PAN, Aadhaar, voter identification cards, and statutory government registries. Real-world examples: Aadhaar, PAN, Passport, Voter ID.',
+    defaultSensitivity: SensitivityLevel.CRITICAL,
+    riskWeight: 10,
   },
   {
-    categoryName: 'Phone Number',
-    description: 'Personal cellular, landline, or VoIP telephone numbers used for multi-factor authentication or communications.',
+    categoryName: 'Financial Information',
+    legacyNames: ['Financial Information Category', 'Financial Data'],
+    description: 'Bank account numbers, UPI IDs, credit/debit card details, credit score inquiries, and banking credentials. Real-world examples: Bank Account, UPI ID, Card Details.',
+    defaultSensitivity: SensitivityLevel.CRITICAL,
+    riskWeight: 10,
+  },
+  {
+    categoryName: 'Authentication Credentials',
+    legacyNames: ['Credentials & Security Profile'],
+    description: 'Master passwords, OAuth API keys, login credentials, authentication tokens, and session secrets. Real-world examples: Passwords, API Keys, Login Credentials.',
+    defaultSensitivity: SensitivityLevel.CRITICAL,
+    riskWeight: 10,
+  },
+  {
+    categoryName: 'Identity Information',
+    legacyNames: ['Personal Photograph & Media'],
+    description: 'Legal full name, date of birth, gender, nationality, and primary demographic profile indicators. Real-world examples: Full Name, Date of Birth, Gender.',
+    defaultSensitivity: SensitivityLevel.HIGH,
+    riskWeight: 7,
+  },
+  {
+    categoryName: 'Contact Information',
+    legacyNames: ['Phone Number'],
+    description: 'Cellular telephone numbers, primary and recovery email addresses, and personal communication channels. Real-world examples: Phone Number, Email Address.',
+    defaultSensitivity: SensitivityLevel.HIGH,
+    riskWeight: 7,
+  },
+  {
+    categoryName: 'Location Information',
+    legacyNames: ['Location & Tracking History', 'Location Data'],
+    description: 'Physical residential street address, real-time GPS telemetry, frequent geolocation check-ins, and travel routes. Real-world examples: Home Address, GPS, Live Location.',
+    defaultSensitivity: SensitivityLevel.CRITICAL,
+    riskWeight: 9,
+  },
+  {
+    categoryName: 'Biometric Information',
+    legacyNames: ['Biometric Profile Category'],
+    description: 'Facial recognition geometry, fingerprint templates, voiceprint signatures, and biological markers. Real-world examples: Face Data, Fingerprints, Voiceprints.',
+    defaultSensitivity: SensitivityLevel.CRITICAL,
+    riskWeight: 10,
+  },
+  {
+    categoryName: 'Health Information',
+    legacyNames: ['Health & Medical Record Category'],
+    description: 'Electronic health records, clinical prescriptions, diagnostic reports, and medical treatment histories. Real-world examples: Medical Records, Prescriptions.',
+    defaultSensitivity: SensitivityLevel.CRITICAL,
+    riskWeight: 9,
+  },
+  {
+    categoryName: 'Employment Information',
+    legacyNames: ['Resume & Employment Dossier'],
+    description: 'Current employer, employee ID numbers, salary data, work history, and curriculum vitae. Real-world examples: Employee ID, Company, Salary.',
+    defaultSensitivity: SensitivityLevel.MEDIUM,
+    riskWeight: 6,
+  },
+  {
+    categoryName: 'Education Information',
+    legacyNames: ['Email Address'],
+    description: 'Student ID numbers, university degrees, academic transcripts, and institutional educational certifications. Real-world examples: Student ID, Certificates, Academic Records.',
     defaultSensitivity: SensitivityLevel.MEDIUM,
     riskWeight: 5,
   },
   {
-    categoryName: 'Home Address',
-    description: 'Physical residential street addresses, postal codes, and geographical dwelling indicators.',
-    defaultSensitivity: SensitivityLevel.HIGH,
-    riskWeight: 7,
-  },
-  {
-    categoryName: 'Government Identification Category',
-    description: 'Classifications covering passports, national identity numbers, driver licenses, or social security registries. Stores category metadata only; never stores raw identity documents or numbers.',
-    defaultSensitivity: SensitivityLevel.CRITICAL,
-    riskWeight: 10,
-  },
-  {
-    categoryName: 'Financial Information Category',
-    description: 'Classifications covering payment card references, bank routing associations, credit score inquiries, and payroll connections. Stores category metadata only; never stores raw credentials or account numbers.',
-    defaultSensitivity: SensitivityLevel.CRITICAL,
-    riskWeight: 9,
-  },
-  {
-    categoryName: 'Resume & Employment Dossier',
-    description: 'Curriculum vitae, detailed employment history, references, compensation benchmarks, and educational transcripts.',
+    categoryName: 'Social Media Information',
+    legacyNames: ['Browsing & Behavioral Profiling'],
+    description: 'Public social profiles, personal posts, subscriber connections, and social network relationship graphs. Real-world examples: Social Profiles, Posts, Connections.',
     defaultSensitivity: SensitivityLevel.MEDIUM,
-    riskWeight: 4,
-  },
-  {
-    categoryName: 'Personal Photograph & Media',
-    description: 'Facial photographs, family media, personal camera roll uploads, and user likeness assets.',
-    defaultSensitivity: SensitivityLevel.HIGH,
     riskWeight: 6,
   },
   {
-    categoryName: 'Biometric Profile Category',
-    description: 'Classifications denoting facial geometry metadata, voiceprint signatures, or fingerprint enrollment status. Never stores raw biometric templates.',
-    defaultSensitivity: SensitivityLevel.CRITICAL,
-    riskWeight: 10,
-  },
-  {
-    categoryName: 'Health & Medical Record Category',
-    description: 'Classifications indicating medical appointments, diagnostic histories, prescriptions, or fitness tracker logs.',
-    defaultSensitivity: SensitivityLevel.CRITICAL,
-    riskWeight: 9,
-  },
-  {
-    categoryName: 'Location & Tracking History',
-    description: 'Continuous GPS telemetry, frequent location check-ins, Wi-Fi SSID logs, and travel itineraries.',
+    categoryName: 'Family & Personal Relationships',
+    legacyNames: ['Home Address'],
+    description: 'Family member records, next-of-kin declarations, household associations, and emergency contact details. Real-world examples: Family Details, Emergency Contacts.',
     defaultSensitivity: SensitivityLevel.HIGH,
     riskWeight: 7,
-  },
-  {
-    categoryName: 'Credentials & Security Profile',
-    description: 'Cryptographic hash references, authentication tokens, security question topics, and MFA status flags.',
-    defaultSensitivity: SensitivityLevel.CRITICAL,
-    riskWeight: 10,
-  },
-  {
-    categoryName: 'Browsing & Behavioral Profiling',
-    description: 'Cross-site ad identifiers, browsing interest categorizations, device fingerprinting, and behavioral tracking profiles.',
-    defaultSensitivity: SensitivityLevel.MEDIUM,
-    riskWeight: 4,
   },
 ];
 
@@ -104,14 +117,20 @@ async function seed(): Promise<void> {
   let updatedCount = 0;
 
   for (const cat of REFERENCE_CATEGORIES) {
-    const existing = await prisma.dataCategory.findUnique({
-      where: { categoryName: cat.categoryName },
+    const existing = await prisma.dataCategory.findFirst({
+      where: {
+        OR: [
+          { categoryName: cat.categoryName },
+          ...(cat.legacyNames ? cat.legacyNames.map((name) => ({ categoryName: name })) : []),
+        ],
+      },
     });
 
     if (existing) {
       await prisma.dataCategory.update({
-        where: { categoryName: cat.categoryName },
+        where: { id: existing.id },
         data: {
+          categoryName: cat.categoryName,
           description: cat.description,
           defaultSensitivity: cat.defaultSensitivity,
           riskWeight: cat.riskWeight,

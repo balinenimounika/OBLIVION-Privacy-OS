@@ -79,3 +79,35 @@ export const StatusBadge: React.FC<{ status: string; className?: string }> = ({
       return <Badge variant="neutral" size="sm" className={className}>{status?.replace('_', ' ') || 'UNKNOWN'}</Badge>;
   }
 };
+
+export const VisibilityBadge: React.FC<{ visibility?: string; className?: string }> = ({
+  visibility,
+  className = '',
+}) => {
+  switch (visibility?.toUpperCase()) {
+    case 'PUBLIC':
+      return <Badge variant="danger" size="sm" className={className}>PUBLIC</Badge>;
+    case 'RESTRICTED':
+      return <Badge variant="warning" size="sm" className={className}>RESTRICTED</Badge>;
+    case 'PRIVATE':
+      return <Badge variant="success" size="sm" className={className}>PRIVATE</Badge>;
+    case 'UNKNOWN':
+    default:
+      return <Badge variant="neutral" size="sm" className={className}>UNKNOWN</Badge>;
+  }
+};
+
+export const RemediationBadge: React.FC<{ status?: string; className?: string }> = ({
+  status,
+  className = '',
+}) => {
+  switch (status?.toUpperCase()) {
+    case 'RESOLVED':
+      return <Badge variant="success" size="sm" className={className}>RESOLVED</Badge>;
+    case 'IN_PROGRESS':
+      return <Badge variant="warning" size="sm" className={className}>IN PROGRESS</Badge>;
+    case 'NOT_STARTED':
+    default:
+      return <Badge variant="neutral" size="sm" className={className}>NOT STARTED</Badge>;
+  }
+};

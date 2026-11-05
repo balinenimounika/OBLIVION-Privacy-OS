@@ -23,6 +23,34 @@ enum AccountStatus {
   PENDING_VERIFICATION
 }
 
+enum ExposureSource {
+  ACCOUNT_REGISTRATION
+  JOB_APPLICATION
+  SOCIAL_MEDIA
+  PUBLIC_WEBSITE
+  ONLINE_PURCHASE
+  OTHER
+}
+
+enum ExposureVisibility {
+  PRIVATE
+  RESTRICTED
+  PUBLIC
+  UNKNOWN
+}
+
+enum DataSharingStatus {
+  ACTIVE
+  NO_LONGER_SHARED
+  UNKNOWN
+}
+
+enum RemediationStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  RESOLVED
+}
+
 enum WebsiteCategory {
   SOCIAL_MEDIA
   E_COMMERCE
@@ -167,18 +195,26 @@ model Website {
 
 /// Exposure Records representing personal data entries entrusted to websites
 model ExposureRecord {
-  id               String           @id @default(uuid()) @db.Uuid
-  userId           String           @map("user_id") @db.Uuid
-  websiteId        String           @map("website_id") @db.Uuid
-  purpose          String           @db.VarChar(255)
-  sensitivityLevel SensitivityLevel @default(MEDIUM) @map("sensitivity_level")
-  dateShared       DateTime         @map("date_shared") @db.Timestamptz
-  reviewDate       DateTime?        @map("review_date") @db.Timestamptz
-  expiryDate       DateTime?        @map("expiry_date") @db.Timestamptz
-  recordStatus     RecordStatus     @default(ACTIVE) @map("record_status")
-  notes            String?          @db.Text
-  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+  id                 String             @id @default(uuid()) @db.Uuid
+  userId             String             @map("user_id") @db.Uuid
+  websiteId          String             @map("website_id") @db.Uuid
+  purpose            String             @db.VarChar(255)
+  sensitivityLevel   SensitivityLevel   @default(MEDIUM) @map("sensitivity_level")
+  dateShared         DateTime           @map("date_shared") @db.Timestamptz
+  reviewDate         DateTime?          @map("review_date") @db.Timestamptz
+  expiryDate         DateTime?          @map("expiry_date") @db.Timestamptz
+  recordStatus       RecordStatus       @default(ACTIVE) @map("record_status")
+  notes              String?            @db.Text
+  platformUrl        String?            @map("platform_url") @db.VarChar(1024)
+  dataDescription    String?            @map("data_description") @db.Text
+  exposureSource     ExposureSource     @default(OTHER) @map("exposure_source")
+  visibility         ExposureVisibility @default(UNKNOWN) @map("visibility")
+  sharingStatus      DataSharingStatus  @default(ACTIVE) @map("sharing_status")
+  lastVerifiedDate   DateTime?          @map("last_verified_date") @db.Timestamptz
+  remediationStatus  RemediationStatus  @default(NOT_STARTED) @map("remediation_status")
+  evidenceAttachment String?            @map("evidence_attachment") @db.VarChar(1024)
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relationships
   user            User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -191,6 +227,9 @@ model ExposureRecord {
   @@index([websiteId])
   @@index([recordStatus])
   @@index([sensitivityLevel])
+  @@index([remediationStatus])
+  @@index([visibility])
+  @@index([sharingStatus])
   @@index([reviewDate])
   @@index([userId, recordStatus])
   @@map("exposure_records")
