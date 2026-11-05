@@ -53,7 +53,12 @@ export interface SendEmailResult {
   error?: string;
   statusCode?: number;
   isRetryable?: boolean;
+  isQuotaExceeded?: boolean;
+  quotaMessage?: string;
 }
+
+export const RESEND_QUOTA_EXCEEDED_MESSAGE =
+  'Email delivery temporarily unavailable. The email service has reached its sending limit.';
 
 export class EmailService {
   private static client: Resend | null = null;
@@ -90,6 +95,67 @@ export class EmailService {
       return false;
     }
     return Boolean(env.RESEND_API_KEY && env.RESEND_API_KEY.trim().length > 0);
+  }
+
+  /**
+   * Detects and classifies Resend quota exhaustion and daily sending limit errors.
+   * Recognizes HTTP 429 / 402, rate_limit_exceeded, daily_quota_exceeded, and provider limit patterns.
+   */
+  static isQuotaExceededError(error: any, statusCode?: number): boolean {
+    if (!error) return statusCode === 429 || statusCode === 402;
+
+    const code = statusCode || error?.statusCode || error?.status;
+    if (code === 429 || code === 402) {
+      return true;
+    }
+
+    const errorName = String(error?.name || error?.type || error?.code || '').toLowerCase();
+    const quotaNames = [
+      'rate_limit_exceeded',
+      'daily_quota_exceeded',
+      'quota_exceeded',
+      'monthly_quota_exceeded',
+      'daily_limit_exceeded',
+      'plan_limit_exceeded',
+      'sending_limit_exceeded',
+    ];
+    if (quotaNames.includes(errorName)) {
+      return true;
+    }
+
+    const message = (
+      typeof error === 'string'
+        ? error
+        : (error?.message || error?.error || (typeof error === 'object' ? JSON.stringify(error) : ''))
+    ).toLowerCase();
+
+    const quotaPatterns = [
+      /daily\s*(email)?\s*sending\s*limit/,
+      /daily\s*limit/,
+      /daily\s*quota/,
+      /quota\s*exceeded/,
+      /sending\s*limit/,
+      /rate\s*limit/,
+      /100%\s*of\s*(your\s*)?daily/,
+      /reached\s*(your\s*)?daily/,
+      /too\s*many\s*requests/,
+      /plan\s*limit/,
+      /monthly\s*quota/,
+    ];
+
+    return quotaPatterns.some((pattern) => pattern.test(message));
+  }
+
+  /**
+   * Sanitizes error messages by scrubbing API keys, tokens, and authorization headers.
+   */
+  static sanitizeErrorMessage(message: string): string {
+    if (!message) return '';
+    return message
+      .replace(/re_[a-zA-Z0-9_-]{16,}/gi, 're_[REDACTED]')
+      .replace(/Bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]')
+      .replace(/(api[_-]?key\s*[:=]\s*)[^\s,]+/gi, '$1[REDACTED]')
+      .replace(/(secret\s*[:=]\s*)[^\s,]+/gi, '$1[REDACTED]');
   }
 
   /**
@@ -162,7 +228,20 @@ export class EmailService {
   static async sendEmail(opts: SendEmailOptions): Promise<SendEmailResult> {
     // 1. Check if mock sender is active (e.g. during automated test suites)
     if (this.mockSender) {
-      return this.mockSender(opts);
+      const mockResult = await this.mockSender(opts);
+      if (!mockResult.success && mockResult.isQuotaExceeded === undefined) {
+        const isQuota = this.isQuotaExceededError(mockResult.error, mockResult.statusCode);
+        if (isQuota) {
+          return {
+            ...mockResult,
+            isQuotaExceeded: true,
+            error: RESEND_QUOTA_EXCEEDED_MESSAGE,
+            quotaMessage: RESEND_QUOTA_EXCEEDED_MESSAGE,
+            isRetryable: false,
+          };
+        }
+      }
+      return mockResult;
     }
 
     // 2. Validate environment configuration
@@ -226,15 +305,23 @@ export class EmailService {
 
       if (response.error) {
         const errorMsg = response.error.message || 'Resend API returned an error';
+        const rawStatus = (response.error as any).statusCode || (response.error as any).status;
+        const isQuota = this.isQuotaExceededError(response.error, rawStatus);
         const isRateLimit = response.error.name === 'rate_limit_exceeded';
-        const isRetryable = isRateLimit || response.error.name === 'internal_server_error';
+        const isRetryable = !isQuota && (isRateLimit || response.error.name === 'internal_server_error');
 
-        logger.error(`[EmailService] Resend dispatch failed for ${recipient}: ${errorMsg} (${response.error.name})`);
+        const sanitizedMsg = this.sanitizeErrorMessage(errorMsg);
+        logger.error(
+          `[EmailService] Resend dispatch failed for ${recipient}: ${sanitizedMsg} (${response.error.name})`
+        );
 
         return {
           success: false,
-          error: errorMsg,
+          error: isQuota ? RESEND_QUOTA_EXCEEDED_MESSAGE : sanitizedMsg,
+          statusCode: rawStatus,
           isRetryable,
+          isQuotaExceeded: isQuota,
+          quotaMessage: isQuota ? RESEND_QUOTA_EXCEEDED_MESSAGE : undefined,
         };
       }
 
@@ -248,15 +335,19 @@ export class EmailService {
     } catch (err: any) {
       const errorMsg = err.message || 'Unknown network or Resend client error';
       const statusCode = err.statusCode || err.status || 500;
-      const isRetryable = statusCode === 429 || (statusCode >= 500 && statusCode < 600);
+      const isQuota = this.isQuotaExceededError(err, statusCode);
+      const isRetryable = !isQuota && (statusCode === 429 || (statusCode >= 500 && statusCode < 600));
 
-      logger.error(`[EmailService] Network/SDK exception dispatching to ${recipient}: ${errorMsg}`);
+      const sanitizedMsg = this.sanitizeErrorMessage(errorMsg);
+      logger.error(`[EmailService] Network/SDK exception dispatching to ${recipient}: ${sanitizedMsg}`);
 
       return {
         success: false,
-        error: errorMsg,
+        error: isQuota ? RESEND_QUOTA_EXCEEDED_MESSAGE : sanitizedMsg,
         statusCode,
         isRetryable,
+        isQuotaExceeded: isQuota,
+        quotaMessage: isQuota ? RESEND_QUOTA_EXCEEDED_MESSAGE : undefined,
       };
     }
   }
@@ -365,6 +456,16 @@ export class EmailService {
     let errorMessage: string | undefined;
 
     if (lastEvent === 'delivered') {
+      // Guard: Never mark an email that failed or bounced as DELIVERED
+      if (
+        delivery.deliveryStatus === EmailDeliveryStatus.FAILED ||
+        delivery.deliveryStatus === EmailDeliveryStatus.BOUNCED
+      ) {
+        logger.warn(
+          `[EmailService] Cannot transition delivery ${delivery.id} from ${delivery.deliveryStatus} to DELIVERED`
+        );
+        return { updated: false, deliveryStatus: delivery.deliveryStatus, lastEvent };
+      }
       newStatus = EmailDeliveryStatus.DELIVERED;
       deliveredAt = resendData.created_at ? new Date(resendData.created_at) : new Date();
     } else if (lastEvent === 'bounced') {

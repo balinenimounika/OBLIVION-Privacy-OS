@@ -793,7 +793,17 @@ export const SettingsPage: React.FC = () => {
                       {item.recipientEmail}
                     </td>
                     <td className="py-2.5 pr-3">
-                      {getStatusBadge(item.deliveryStatus)}
+                      <div className="flex flex-col gap-0.5">
+                        {getStatusBadge(item.deliveryStatus)}
+                        {item.errorMessage && (
+                          <span
+                            className="text-[10px] text-rose-300 max-w-[220px] truncate font-sans"
+                            title={item.errorMessage}
+                          >
+                            {item.errorMessage}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-2.5 text-right text-[11px] text-slate-400 font-mono">
                       {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'N/A'}

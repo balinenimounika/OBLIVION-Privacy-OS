@@ -23,8 +23,17 @@ const SENSITIVE_KEYS = [
 type ErrorListener = (error: Error, context?: any) => void;
 const errorListeners: ErrorListener[] = [];
 
+function sanitizeString(str: string): string {
+  return str
+    .replace(/re_[a-zA-Z0-9_-]{16,}/gi, 're_[REDACTED]')
+    .replace(/Bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]')
+    .replace(/(api[_-]?key\s*[:=]\s*)[^\s,]+/gi, '$1[REDACTED]')
+    .replace(/(secret\s*[:=]\s*)[^\s,]+/gi, '$1[REDACTED]');
+}
+
 function sanitize(data: any): any {
   if (data === null || data === undefined) return data;
+  if (typeof data === 'string') return sanitizeString(data);
   if (typeof data !== 'object') return data;
   if (Array.isArray(data)) return data.map(sanitize);
 
@@ -34,6 +43,8 @@ function sanitize(data: any): any {
       copy[key] = '[REDACTED]';
     } else if (typeof val === 'object') {
       copy[key] = sanitize(val);
+    } else if (typeof val === 'string') {
+      copy[key] = sanitizeString(val);
     } else {
       copy[key] = val;
     }
@@ -44,12 +55,13 @@ function sanitize(data: any): any {
 function outputLog(level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: string, meta?: any) {
   const timestamp = new Date().toISOString();
   const isProd = process.env.NODE_ENV === 'production' || process.env.LOG_FORMAT === 'json';
+  const cleanMessage = sanitizeString(message);
 
   if (isProd) {
     const payload: Record<string, any> = {
       timestamp,
       level: level.toLowerCase(),
-      message,
+      message: cleanMessage,
     };
     if (meta !== undefined) {
       payload.context = sanitize(meta);
@@ -70,13 +82,13 @@ function outputLog(level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: string, 
   // Development / Test mode: Human-readable output
   const metaStr = meta ? ` ${JSON.stringify(sanitize(meta))}` : '';
   if (level === 'ERROR') {
-    console.error(`[${timestamp}] [ERROR] ${message}${metaStr}`);
+    console.error(`[${timestamp}] [ERROR] ${cleanMessage}${metaStr}`);
   } else if (level === 'WARN') {
-    console.warn(`[${timestamp}] [WARN] ${message}${metaStr}`);
+    console.warn(`[${timestamp}] [WARN] ${cleanMessage}${metaStr}`);
   } else if (level === 'DEBUG') {
-    console.debug(`[${timestamp}] [DEBUG] ${message}${metaStr}`);
+    console.debug(`[${timestamp}] [DEBUG] ${cleanMessage}${metaStr}`);
   } else {
-    console.log(`[${timestamp}] [INFO] ${message}${metaStr}`);
+    console.log(`[${timestamp}] [INFO] ${cleanMessage}${metaStr}`);
   }
 }
 

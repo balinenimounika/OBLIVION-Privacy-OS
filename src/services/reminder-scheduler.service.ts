@@ -15,7 +15,7 @@ import {
 } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { logger } from '../utils/logger';
-import { EmailService } from './email.service';
+import { EmailService, RESEND_QUOTA_EXCEEDED_MESSAGE } from './email.service';
 import { UserPreferenceService } from './user-preference.service';
 import { buildReminderEmail } from '../templates/email-templates';
 
@@ -393,7 +393,29 @@ export class ReminderSchedulerService {
           const newAttemptCount = job.attemptCount + 1;
           const maxRetries = 5;
 
-          if (result.isRetryable && newAttemptCount < maxRetries) {
+          if (result.isQuotaExceeded) {
+            // Resend daily sending limit / quota exceeded:
+            // Immediately store as FAILED with friendly message and quota telemetry metadata.
+            // Do not waste rapid backoff attempts; record for safe retry when quota restores.
+            await prisma.emailDelivery.update({
+              where: { id: job.id },
+              data: {
+                deliveryStatus: EmailDeliveryStatus.FAILED,
+                failedAt: new Date(),
+                errorMessage: RESEND_QUOTA_EXCEEDED_MESSAGE,
+                metadata: {
+                  ...(typeof job.metadata === 'object' && job.metadata ? (job.metadata as any) : {}),
+                  quotaExceeded: true,
+                  retryEligible: true,
+                  failedAt: new Date().toISOString(),
+                  providerError: EmailService.sanitizeErrorMessage(result.error || 'Resend quota exceeded'),
+                },
+              },
+            });
+            logger.warn(
+              `[ReminderScheduler] Delivery ${job.id} to ${job.recipientEmail} marked as FAILED due to Resend quota limit: ${RESEND_QUOTA_EXCEEDED_MESSAGE}`
+            );
+          } else if (result.isRetryable && newAttemptCount < maxRetries) {
             // Exponential backoff: 2s, 4s, 8s, 16s, 32s (capped at 1 hour)
             const backoffMs = Math.min(1000 * Math.pow(2, newAttemptCount), 3600000);
             await prisma.emailDelivery.update({
@@ -428,6 +450,166 @@ export class ReminderSchedulerService {
     }
 
     return { processed, sent, failed, skipped };
+  }
+
+  /**
+   * Safely retries email deliveries that previously failed due to Resend quota exhaustion.
+   *
+   * Safeguards:
+   * - Atomic concurrency lock: transitions FAILED -> SENDING atomically via updateMany.
+   * - Idempotency guarantee: never retries an email that already has a resendEmailId or is already sent.
+   * - Status transition safety: successful dispatch transitions status strictly to SENT, never DELIVERED directly.
+   * - Provider error isolation: if quota is still exhausted, preserves status as FAILED with user-friendly message.
+   */
+  static async retryFailedQuotaDeliveries(options: {
+    userId?: string;
+    deliveryId?: string;
+    limit?: number;
+  } = {}): Promise<{
+    eligible: number;
+    retried: number;
+    succeeded: number;
+    failed: number;
+    stillQuotaExceeded: boolean;
+  }> {
+    const limit = options.limit || 50;
+
+    // Identify failed delivery records that encountered sending limits
+    const where: any = {
+      deliveryStatus: EmailDeliveryStatus.FAILED,
+      OR: [
+        { errorMessage: { contains: 'sending limit' } },
+        { errorMessage: { contains: 'temporarily unavailable' } },
+        { errorMessage: { contains: 'quota' } },
+      ],
+    };
+
+    if (options.userId) {
+      where.userId = options.userId;
+    }
+    if (options.deliveryId) {
+      where.id = options.deliveryId;
+    }
+
+    const eligibleRecords = await prisma.emailDelivery.findMany({
+      where,
+      take: limit,
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const results = {
+      eligible: eligibleRecords.length,
+      retried: 0,
+      succeeded: 0,
+      failed: 0,
+      stillQuotaExceeded: false,
+    };
+
+    for (const record of eligibleRecords) {
+      // 1. Idempotency guard: If resendEmailId already exists, do not dispatch again
+      if (record.resendEmailId) {
+        logger.warn(
+          `[ReminderScheduler] Skipping retry for delivery ${record.id}: already has Resend ID ${record.resendEmailId}`
+        );
+        continue;
+      }
+
+      // 2. Concurrency claim: Atomically transition status from FAILED -> SENDING
+      const claimResult = await prisma.emailDelivery.updateMany({
+        where: {
+          id: record.id,
+          deliveryStatus: EmailDeliveryStatus.FAILED,
+        },
+        data: {
+          deliveryStatus: EmailDeliveryStatus.SENDING,
+          lastAttemptAt: new Date(),
+          attemptCount: { increment: 1 },
+        },
+      });
+
+      if (claimResult.count === 0) {
+        // Concurrently claimed by another worker or status changed
+        continue;
+      }
+
+      results.retried++;
+
+      const meta = (record.metadata || {}) as any;
+      const html = meta.html || `<p>${record.subject}</p>`;
+      const text = meta.text || record.subject;
+
+      // 3. Dispatch to Resend via EmailService
+      const sendResult = await EmailService.sendEmail({
+        to: record.recipientEmail,
+        subject: record.subject,
+        html,
+        text,
+      });
+
+      if (sendResult.success) {
+        // Resend accepted email: transition to SENT (never DELIVERED directly)
+        await prisma.emailDelivery.update({
+          where: { id: record.id },
+          data: {
+            deliveryStatus: EmailDeliveryStatus.SENT,
+            resendEmailId: sendResult.resendEmailId,
+            sentAt: new Date(),
+            errorMessage: null,
+            metadata: {
+              ...meta,
+              retriedAt: new Date().toISOString(),
+              retrySucceeded: true,
+              quotaExceeded: false,
+            },
+          },
+        });
+        results.succeeded++;
+        logger.info(
+          `[ReminderScheduler] Successfully retried delivery ${record.id} (Resend ID: ${sendResult.resendEmailId})`
+        );
+      } else {
+        results.failed++;
+        if (sendResult.isQuotaExceeded) {
+          results.stillQuotaExceeded = true;
+          await prisma.emailDelivery.update({
+            where: { id: record.id },
+            data: {
+              deliveryStatus: EmailDeliveryStatus.FAILED,
+              failedAt: new Date(),
+              errorMessage: RESEND_QUOTA_EXCEEDED_MESSAGE,
+              metadata: {
+                ...meta,
+                quotaExceeded: true,
+                retryEligible: true,
+                lastRetryFailedAt: new Date().toISOString(),
+                providerError: EmailService.sanitizeErrorMessage(sendResult.error || 'Resend quota exceeded'),
+              },
+            },
+          });
+          logger.warn(
+            `[ReminderScheduler] Retry for delivery ${record.id} failed: daily sending limit is still active. Pausing further batch retries.`
+          );
+          // Break batch to avoid spamming the provider while quota remains exhausted
+          break;
+        } else {
+          await prisma.emailDelivery.update({
+            where: { id: record.id },
+            data: {
+              deliveryStatus: EmailDeliveryStatus.FAILED,
+              failedAt: new Date(),
+              errorMessage: EmailService.sanitizeErrorMessage(sendResult.error || 'Email dispatch failed'),
+              metadata: {
+                ...meta,
+                lastRetryFailedAt: new Date().toISOString(),
+              },
+            },
+          });
+          logger.error(`[ReminderScheduler] Retry for delivery ${record.id} failed: ${sendResult.error}`);
+        }
+      }
+    }
+
+    return results;
   }
 
   /**
@@ -700,6 +882,9 @@ export class ReminderSchedulerService {
 
       // Process any pending email deliveries queued in this pass
       await this.processPendingEmailDeliveries();
+
+      // Automatically retry eligible quota-failed deliveries if daily limit has refreshed
+      await this.retryFailedQuotaDeliveries({ limit: 10 });
     } catch (err: any) {
       logger.error('[ReminderScheduler] Error during reminder scan:', err.message);
     } finally {

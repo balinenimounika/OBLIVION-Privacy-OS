@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
 import { UserPreferenceService } from '../services/user-preference.service';
 import { UserEmailNotificationService } from '../services/user-email-notification.service';
+import { ReminderSchedulerService } from '../services/reminder-scheduler.service';
 import { EmailService } from '../services/email.service';
 import { ApiResponse } from '../utils/api-response';
 import { ApiError } from '../utils/api-error';
@@ -165,6 +166,55 @@ export class UserPreferenceController {
         ...status,
         senderConfig: config,
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * Safely retries a specific failed email delivery record.
+   */
+  static async retryDelivery(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = (req as any).user.id;
+      const id = req.params.id as string;
+
+      const delivery = await prisma.emailDelivery.findFirst({
+        where: { id, userId },
+      });
+
+      if (!delivery) {
+        throw ApiError.notFound('Email delivery record not found');
+      }
+
+      if (delivery.deliveryStatus !== 'FAILED') {
+        throw ApiError.badRequest(
+          `Only failed email deliveries can be retried. Current status is ${delivery.deliveryStatus}`
+        );
+      }
+
+      const results = await ReminderSchedulerService.retryFailedQuotaDeliveries({
+        userId,
+        deliveryId: id,
+      });
+
+      ApiResponse.success(res, 'Email delivery retry completed', results);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * Safely retries all failed email deliveries eligible for retry.
+   */
+  static async retryAllFailedDeliveries(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = (req as any).user.id;
+      const results = await ReminderSchedulerService.retryFailedQuotaDeliveries({
+        userId,
+      });
+
+      ApiResponse.success(res, 'Batch retry of failed email deliveries completed', results);
     } catch (err) {
       next(err);
     }

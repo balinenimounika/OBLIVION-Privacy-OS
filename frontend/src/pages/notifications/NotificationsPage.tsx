@@ -389,7 +389,7 @@ export const NotificationsPage: React.FC = () => {
                                   ? `\nSent at: ${new Date(delivery.sentAt).toLocaleTimeString()}`
                                   : ''
                               }${
-                                delivery.errorMessage ? `\nError: ${delivery.errorMessage}` : ''
+                                delivery.errorMessage ? `\nDetails: ${delivery.errorMessage}` : ''
                               }`}
                             >
                               <Mail className="w-3 h-3" />
@@ -399,6 +399,17 @@ export const NotificationsPage: React.FC = () => {
                         })()
                       )}
                     </div>
+
+                    {/* Email Delivery Failure / Quota Exceeded User-Friendly Message */}
+                    {notif.emailDeliveries?.[0]?.deliveryStatus === 'FAILED' && notif.emailDeliveries?.[0]?.errorMessage && (
+                      <div className="mt-2.5 flex items-start gap-2 p-2 rounded-lg bg-rose-950/30 border border-rose-800/40 text-rose-300 text-[11px] leading-relaxed">
+                        <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <span className="font-semibold text-rose-200">Delivery Notice: </span>
+                          <span>{notif.emailDeliveries[0].errorMessage}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

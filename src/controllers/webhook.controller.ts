@@ -92,9 +92,18 @@ export class WebhookController {
         return;
       }
 
-      // Safe state transitions: Never degrade DELIVERED to SENT or PENDING
+      // Safe state transitions: Never degrade DELIVERED to SENT or PENDING, and never mark FAILED/BOUNCED as DELIVERED
       switch (eventType) {
         case 'email.delivered':
+          if (
+            delivery.deliveryStatus === EmailDeliveryStatus.FAILED ||
+            delivery.deliveryStatus === EmailDeliveryStatus.BOUNCED
+          ) {
+            logger.warn(
+              `[WebhookController] Ignoring delivered event for delivery ${delivery.id} already marked as ${delivery.deliveryStatus}`
+            );
+            break;
+          }
           await prisma.emailDelivery.update({
             where: { id: delivery.id },
             data: {

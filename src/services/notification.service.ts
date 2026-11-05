@@ -12,6 +12,20 @@ import { NotificationQueryDTO } from '../validators/notification.validator';
 import { NotificationListResponse, NotificationWithEmailDelivery } from '../types/notification.types';
 import { AuditLogService } from './audit-log.service';
 import { AuditAction, AuditEntityType } from '../types/audit-log.types';
+import { EmailService, RESEND_QUOTA_EXCEEDED_MESSAGE } from './email.service';
+
+function formatDeliveryErrorMessage(delivery: { deliveryStatus: string; errorMessage?: string | null }): string | null {
+  if (!delivery.errorMessage) return null;
+  if (
+    delivery.deliveryStatus === 'FAILED' &&
+    (EmailService.isQuotaExceededError(delivery.errorMessage) ||
+      delivery.errorMessage.includes('sending limit') ||
+      delivery.errorMessage.includes('temporarily unavailable'))
+  ) {
+    return RESEND_QUOTA_EXCEEDED_MESSAGE;
+  }
+  return delivery.errorMessage;
+}
 
 export class NotificationService {
   /**
@@ -61,8 +75,16 @@ export class NotificationService {
       }),
     ]);
 
+    const formattedNotifications = notifications.map((n) => ({
+      ...n,
+      emailDeliveries: n.emailDeliveries?.map((d) => ({
+        ...d,
+        errorMessage: formatDeliveryErrorMessage(d),
+      })),
+    }));
+
     return {
-      notifications,
+      notifications: formattedNotifications,
       meta: {
         page,
         limit,
@@ -101,7 +123,13 @@ export class NotificationService {
       throw ApiError.notFound('Notification not found');
     }
 
-    return notification;
+    return {
+      ...notification,
+      emailDeliveries: notification.emailDeliveries?.map((d) => ({
+        ...d,
+        errorMessage: formatDeliveryErrorMessage(d),
+      })),
+    };
   }
 
   /**

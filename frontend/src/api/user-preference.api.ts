@@ -44,6 +44,22 @@ export const userPreferenceApi = {
   },
 
   /**
+   * Safely retries a specific failed email delivery.
+   */
+  async retryEmailDelivery(id: string): Promise<ApiResponse<any>> {
+    const res = await apiClient.post<ApiResponse<any>>(`/users/preferences/deliveries/${id}/retry`);
+    return res.data;
+  },
+
+  /**
+   * Safely retries all failed email deliveries eligible for retry.
+   */
+  async retryAllFailedDeliveries(): Promise<ApiResponse<any>> {
+    const res = await apiClient.post<ApiResponse<any>>('/users/preferences/deliveries/retry-failed');
+    return res.data;
+  },
+
+  /**
    * Dispatches email verification link to user's registered email address.
    */
   async resendVerification(): Promise<ApiResponse<void>> {
