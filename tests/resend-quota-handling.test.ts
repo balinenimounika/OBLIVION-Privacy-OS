@@ -211,7 +211,7 @@ async function runResendQuotaHandlingTests() {
       `Status: ${deliveryRecord?.deliveryStatus}, Message: "${deliveryRecord?.errorMessage}", quotaExceeded: ${metadata?.quotaExceeded}`
     );
 
-    // Verify NotificationService delivers the exact user-friendly message
+    // Verify NotificationService suppresses internal Resend errors from user-facing responses
     const notifsResponse = await NotificationService.getNotifications(testUserId, {
       page: 1,
       limit: 10,
@@ -224,9 +224,9 @@ async function runResendQuotaHandlingTests() {
 
     recordTest(
       'USER_FACING_DETAILS',
-      'Notification query returns user-friendly limit message in delivery details',
-      apiDeliveryMessage === RESEND_QUOTA_EXCEEDED_MESSAGE,
-      `Returned errorMessage: "${apiDeliveryMessage}"`
+      'Notification query suppresses internal technical Resend errors from user-facing API responses',
+      apiDeliveryMessage === null,
+      `Returned errorMessage: ${JSON.stringify(apiDeliveryMessage)} (expected null for clean user dashboard)`
     );
 
     // =========================================================================

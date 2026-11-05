@@ -11,7 +11,6 @@ import {
   ExternalLink,
   Flame,
   CheckCircle2,
-  Mail,
 } from 'lucide-react';
 import { Notification, NotificationType } from '../../types';
 import { Card } from '../../components/common/Card';
@@ -349,67 +348,7 @@ export const NotificationsPage: React.FC = () => {
                           <ExternalLink className="w-2.5 h-2.5 opacity-70 ml-0.5" />
                         </button>
                       )}
-
-                      {/* Email Delivery Status Badge */}
-                      {notif.emailDeliveries && notif.emailDeliveries.length > 0 && (
-                        (() => {
-                          const delivery = notif.emailDeliveries[0];
-                          const status = delivery.deliveryStatus;
-                          const getEmailBadgeStyle = (st: string) => {
-                            switch (st) {
-                              case 'DELIVERED':
-                                return 'text-emerald-400 bg-emerald-950/50 border-emerald-500/30';
-                              case 'SENT':
-                                return 'text-blue-400 bg-blue-950/50 border-blue-500/30';
-                              case 'SENDING':
-                              case 'PENDING':
-                                return 'text-amber-400 bg-amber-950/50 border-amber-500/30';
-                              case 'BOUNCED':
-                              case 'FAILED':
-                                return 'text-rose-400 bg-rose-950/50 border-rose-500/30';
-                              case 'CANCELLED':
-                              default:
-                                return 'text-slate-400 bg-navy-800 border-navy-700';
-                            }
-                          };
-
-                          return (
-                            <span
-                              className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono border ${getEmailBadgeStyle(
-                                status
-                              )}`}
-                              title={`Resend Email Status: ${status}${
-                                delivery.recipientEmail ? `\nRecipient: ${delivery.recipientEmail}` : ''
-                              }${
-                                delivery.resendEmailId ? `\nResend ID: ${delivery.resendEmailId}` : ''
-                              }${
-                                delivery.deliveredAt
-                                  ? `\nDelivered at: ${new Date(delivery.deliveredAt).toLocaleTimeString()}`
-                                  : delivery.sentAt
-                                  ? `\nSent at: ${new Date(delivery.sentAt).toLocaleTimeString()}`
-                                  : ''
-                              }${
-                                delivery.errorMessage ? `\nDetails: ${delivery.errorMessage}` : ''
-                              }`}
-                            >
-                              <Mail className="w-3 h-3" />
-                              <span>Email: {status}</span>
-                            </span>
-                          );
-                        })()
-                      )}
                     </div>
-
-                    {/* Email Delivery Failure / Quota Exceeded User-Friendly Message */}
-                    {notif.emailDeliveries?.[0]?.deliveryStatus === 'FAILED' && notif.emailDeliveries?.[0]?.errorMessage && (
-                      <div className="mt-2.5 flex items-start gap-2 p-2 rounded-lg bg-rose-950/30 border border-rose-800/40 text-rose-300 text-[11px] leading-relaxed">
-                        <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
-                        <div className="flex-1">
-                          <span className="font-semibold text-rose-200">Delivery Notice: </span>
-                          <span>{notif.emailDeliveries[0].errorMessage}</span>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
 

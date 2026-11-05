@@ -14,17 +14,21 @@ import { AuditLogService } from './audit-log.service';
 import { AuditAction, AuditEntityType } from '../types/audit-log.types';
 import { EmailService, RESEND_QUOTA_EXCEEDED_MESSAGE } from './email.service';
 
-function formatDeliveryErrorMessage(delivery: { deliveryStatus: string; errorMessage?: string | null }): string | null {
-  if (!delivery.errorMessage) return null;
-  if (
-    delivery.deliveryStatus === 'FAILED' &&
-    (EmailService.isQuotaExceededError(delivery.errorMessage) ||
-      delivery.errorMessage.includes('sending limit') ||
-      delivery.errorMessage.includes('temporarily unavailable'))
-  ) {
-    return RESEND_QUOTA_EXCEEDED_MESSAGE;
-  }
-  return delivery.errorMessage;
+/**
+ * User-facing notifications must never expose internal Resend error messages,
+ * SMTP failures, or technical email delivery diagnostics.
+ */
+function sanitizeUserFacingDelivery(delivery: any) {
+  return {
+    id: delivery.id,
+    deliveryStatus: delivery.deliveryStatus,
+    recipientEmail: delivery.recipientEmail,
+    resendEmailId: delivery.resendEmailId,
+    sentAt: delivery.sentAt,
+    deliveredAt: delivery.deliveredAt,
+    failedAt: delivery.failedAt,
+    errorMessage: null, // Technical errors suppressed from user notifications interface
+  };
 }
 
 export class NotificationService {
@@ -77,10 +81,7 @@ export class NotificationService {
 
     const formattedNotifications = notifications.map((n) => ({
       ...n,
-      emailDeliveries: n.emailDeliveries?.map((d) => ({
-        ...d,
-        errorMessage: formatDeliveryErrorMessage(d),
-      })),
+      emailDeliveries: n.emailDeliveries?.map(sanitizeUserFacingDelivery),
     }));
 
     return {
@@ -125,10 +126,7 @@ export class NotificationService {
 
     return {
       ...notification,
-      emailDeliveries: notification.emailDeliveries?.map((d) => ({
-        ...d,
-        errorMessage: formatDeliveryErrorMessage(d),
-      })),
+      emailDeliveries: notification.emailDeliveries?.map(sanitizeUserFacingDelivery),
     };
   }
 
